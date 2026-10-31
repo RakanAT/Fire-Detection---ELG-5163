@@ -1,0 +1,12 @@
+# Credentials: only the template in config/ is shared
+config/*
+!config/authentication.env.example
+*.env
+!*.env.example
+
+# Downloaded data and generated results (recreated by main.py)
+data/
+outputs/
+
+.venv/
+__pycache__/
