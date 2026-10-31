@@ -78,6 +78,7 @@ Everything under `data/` and `outputs/` is generated and git-ignored; it is recr
 | `data/cache/` | Request cache directory | `fetch` |
 | `data/dataset.csv` | Sampled pixels: `fire_id`, `fire_label`, `burned`, `ndvi`, `anomaly`, `dfi`, `source_image` | `build` |
 | `outputs/` | Comparison table and plots (see [Output files](#output-files)) | `compare` |
+| `outputs/logs/run_<date>_<time>.txt` | Full console output of each `main.py` run, including errors | every run |
 
 ## Requirements
 

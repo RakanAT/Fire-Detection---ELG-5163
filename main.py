@@ -95,11 +95,45 @@ def _load_auth_file(path: Path) -> None:
             os.environ.setdefault(key.strip(), value)
 
 
+class _Tee:
+    """Write to the console and a log file at the same time."""
+
+    def __init__(self, console, log_file):
+        self.console = console
+        self.log_file = log_file
+
+    def write(self, text):
+        self.console.write(text)
+        self.log_file.write(text)
+        self.log_file.flush()
+
+    def flush(self):
+        self.console.flush()
+        self.log_file.flush()
+
+
+def _start_log(output_dir: str) -> Path:
+    log_dir = ROOT / output_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"run_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+    log_file = open(log_path, "w", encoding="utf-8")
+    sys.stdout = _Tee(sys.__stdout__, log_file)
+    sys.stderr = _Tee(sys.__stderr__, log_file)
+    return log_path
+
+
 def _run(script: str, *script_args: str) -> None:
     cmd = [sys.executable, str(ROOT / script), *script_args]
     print(f"\n>>> {' '.join(cmd)}", flush=True)
     start = time.perf_counter()
-    subprocess.run(cmd, cwd=ROOT, check=True)
+    # Pipe the child's output through our (tee'd) stdout so it also lands in the run log.
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+    with subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, encoding="utf-8", errors="replace") as proc:
+        for line in proc.stdout:
+            print(line, end="", flush=True)
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
     print(f"<<< {script} finished in {time.perf_counter() - start:.1f}s", flush=True)
 
 
@@ -330,6 +364,9 @@ HANDLERS = {
 
 def main() -> None:
     args = _parse_args()
+    log_path = _start_log(args.output_dir)
+    print(f"Run started {time.strftime('%Y-%m-%d %H:%M:%S')}: python {' '.join(sys.argv)}")
+    print(f"Log file: {log_path}")
     _load_auth_file(ROOT / args.auth_file)
     if args.margin_m <= args.buffer_m:
         raise SystemExit("--margin-m must be larger than --buffer-m, or the unburned ring is cut off at the image edge.")
@@ -340,8 +377,10 @@ def main() -> None:
             HANDLERS[stage](args)
     except subprocess.CalledProcessError as exc:
         print(f"\nFAILED: {Path(exc.cmd[1]).name} exited with code {exc.returncode}", file=sys.stderr)
+        print(f"Log saved to {log_path}")
         sys.exit(exc.returncode)
     print("\nWorkflow complete.")
+    print(f"Log saved to {log_path}")
 
 
 if __name__ == "__main__":
