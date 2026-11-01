@@ -1,17 +1,12 @@
-import importlib.util
-from pathlib import Path
+﻿"""Synthetic check that the comparison ranks an informative index (DFI) above a weak one (NDVI).
+
+Run with:  python main.py --stages selftest   or   python -m tests.selftest_synthetic
+"""
 
 import numpy as np
 import pandas as pd
 
-
-def load_module():
-    module_path = Path(__file__).with_name("03_bayes_compare.py")
-    spec = importlib.util.spec_from_file_location("bayes_compare", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec is not None and spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+from firedetect.evaluate import compare_indices
 
 
 def generate_synthetic_data():
@@ -23,30 +18,27 @@ def generate_synthetic_data():
             if burned:
                 dfi = rng.normal(0.80, 0.08, size=n)
                 ndvi = rng.normal(0.50, 0.12, size=n)
-                anomaly = rng.normal(0.15, 0.08, size=n)
+                temporal_ndvi = rng.normal(0.15, 0.08, size=n)
             else:
                 dfi = rng.normal(0.25, 0.10, size=n)
                 ndvi = rng.normal(0.48, 0.12, size=n)
-                anomaly = rng.normal(-0.02, 0.10, size=n)
+                temporal_ndvi = rng.normal(-0.02, 0.10, size=n)
             for i in range(n):
                 rows.append({
                     "fire_id": fire_id,
                     "burned": burned,
                     "ndvi": float(ndvi[i]),
-                    "anomaly": float(anomaly[i]),
+                    "temporal_ndvi": float(temporal_ndvi[i]),
                     "dfi": float(dfi[i]),
                 })
     return pd.DataFrame(rows)
 
 
 def run():
-    module = load_module()
     df = generate_synthetic_data()
-    summary, results = module.compare_indices(df, ["ndvi", "anomaly", "dfi"])
+    summary, _ = compare_indices(df, ["ndvi", "temporal_ndvi", "dfi"])
     ranking = summary["index"].tolist()
-    dfi_rank = ranking.index("dfi")
-    ndvi_rank = ranking.index("ndvi")
-    if dfi_rank >= ndvi_rank:
+    if ranking.index("dfi") >= ranking.index("ndvi"):
         raise AssertionError(f"DFI was not ranked ahead of NDVI. Ranking: {ranking}; metrics: {summary.to_dict(orient='records')}")
     if summary.loc[summary["index"] == "dfi", "roc_auc"].iloc[0] <= summary.loc[summary["index"] == "ndvi", "roc_auc"].iloc[0]:
         raise AssertionError(f"DFI ROC-AUC should exceed NDVI on the synthetic dataset. {summary.to_dict(orient='records')}")
