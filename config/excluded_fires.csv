@@ -1,0 +1,5 @@
+# Fires left out of the analysis. The select stage draws other fires in their place and build skips them.
+# Add a fire after checking it (e.g. one flagged suspect_pre_burned in outputs/per_fire.csv).
+fire_id,reason
+276573,"EFFIS FIREDATE 2025-07-26 is too late: burn scar already visible in the 2025-05-27 to 2025-07-16 pre-fire mosaic (NDVI inside fell from ~0.5 to 0.14, B12/B11 1.13)"
+214920,"EFFIS FIREDATE 2023-03-31 is too late: burn scar already visible in the 2023-01-30 to 2023-03-21 pre-fire mosaic (NDVI inside fell from ~0.6 to 0.27, B12/B11 0.91 vs 0.66 in the ring); flagged by the pre-burn check"

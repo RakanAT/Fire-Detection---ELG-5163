@@ -20,6 +20,16 @@ def safe_name(value) -> str:
     return re.sub(r"[^A-Za-z0-9.-]+", "-", str(value).strip())
 
 
+def load_excluded(path) -> dict[str, str]:
+    """Fire IDs to leave out, from a CSV with fire_id and reason columns; {} if path is None or missing."""
+    if not path or not Path(path).exists():
+        return {}
+    import pandas as pd
+
+    table = pd.read_csv(path, dtype=str, comment="#").fillna("")
+    return {safe_name(row.fire_id): row.reason for row in table.itertuples(index=False)}
+
+
 def parse_date(value) -> datetime:
     import pandas as pd
 

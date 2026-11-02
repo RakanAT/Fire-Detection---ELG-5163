@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from .config import COUNTRY_CANDIDATES, DATE_CANDIDATES, EFFIS_WFS, ID_CANDIDATES, REGIONS, ROOT
-from .utils import find_column
+from .utils import find_column, load_excluded, safe_name
 
 
 def download_effis(bounds, first_year: int, last_year: int | None, out_path: Path) -> None:
@@ -57,7 +57,12 @@ def download_effis(bounds, first_year: int, last_year: int | None, out_path: Pat
 
 
 def select_fires(args: argparse.Namespace) -> None:
-    """Clip perimeters to the study region, write all of them to args.fires_file and a sample to args.selected_csv."""
+    """Clip perimeters to the study region, write all of them to args.fires_file and a sample to args.selected_csv.
+
+    The sample is, in order of precedence: the --fire-id list; the frozen sample in args.sample_file (committed,
+    so everyone analyses the same fires); or, with --new-sample or when there is no frozen sample yet, a new
+    random draw, which is also saved as the frozen sample.
+    """
     import geopandas as gpd
     import pandas as pd
     from shapely.geometry import box
@@ -131,6 +136,7 @@ def select_fires(args: argparse.Namespace) -> None:
     fires_file.parent.mkdir(parents=True, exist_ok=True)
     region_fires.to_file(fires_file, driver="GPKG")
 
+    sample_file = ROOT / args.sample_file
     if args.fire_id:
         if args.fire_date and len(args.fire_date) != len(args.fire_id):
             raise SystemExit("--fire-date must have the same number of values as --fire-id.")
@@ -141,14 +147,32 @@ def select_fires(args: argparse.Namespace) -> None:
         if args.fire_date:
             selected["fire_date"] = args.fire_date
         selected = selected.reset_index()
+    elif sample_file.exists() and not args.new_sample:
+        ids = pd.read_csv(sample_file, dtype={"fire_id": str})["fire_id"].str.strip().tolist()
+        selected = region_fires[region_fires["fire_id"].isin(ids)].set_index("fire_id").reindex(ids)
+        missing = selected.index[selected["geometry"].isna()].tolist()
+        if missing:
+            print(f"WARNING: {len(missing)} fire(s) in {args.sample_file} are not in the EFFIS perimeters any more: {missing}")
+        selected = selected[selected["geometry"].notna()].reset_index()
+        print(f"Using the frozen sample in {args.sample_file}; pass --new-sample to draw a new one.")
     else:
+        excluded = load_excluded(ROOT / args.excluded_fires)
         when = pd.to_datetime(region_fires["fire_date"], errors="coerce")
         keep = when.notna() & (when >= pd.Timestamp(args.start_date)) & (region_fires["area_ha"] >= args.min_area_ha)
         if args.end_date:
             keep &= when <= pd.Timestamp(args.end_date)
-        selected = region_fires[keep]
-        if args.max_fires and len(selected) > args.max_fires:
-            selected = selected.sample(n=args.max_fires, random_state=42)
+        # Shuffle all eligible fires with a fixed seed, then drop excluded ones and take the first max_fires,
+        # so excluding a fire only replaces it with the next one instead of reshuffling the whole sample.
+        selected = region_fires[keep].sample(frac=1, random_state=42)
+        is_excluded = selected["fire_id"].map(safe_name).isin(excluded)
+        selected = selected[~is_excluded]
+        if args.max_fires:
+            selected = selected.head(args.max_fires)
+        if is_excluded.any():
+            print(f"Left out {int(is_excluded.sum())} fire(s) listed in {args.excluded_fires}.")
+        sample_file.parent.mkdir(parents=True, exist_ok=True)
+        selected[["fire_id", "fire_date", "area_ha"]].to_csv(sample_file, index=False)
+        print(f"Drew a new sample and saved it as the frozen sample -> {sample_file} (commit it to share it).")
 
     if selected.empty:
         raise SystemExit("No fires matched the selection filters (dates, --min-area-ha). Relax them or pass --fire-id.")

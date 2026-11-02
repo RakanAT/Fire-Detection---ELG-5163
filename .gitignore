@@ -1,6 +1,8 @@
 # Credentials: only the template in config/ is shared
 config/*
 !config/authentication.env.example
+!config/excluded_fires.csv
+!config/selected_fires.csv
 *.env
 !*.env.example
 
