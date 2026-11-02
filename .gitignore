@@ -4,7 +4,6 @@ config/*
 !config/excluded_fires.csv
 !config/selected_fires.csv
 *.env
-!*.env.example
 
 # Downloaded data and generated results (recreated by main.py)
 data/
